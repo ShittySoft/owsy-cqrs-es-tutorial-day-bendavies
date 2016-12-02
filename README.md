@@ -42,4 +42,4 @@ Following steps are to be implemented:
 - [x] Ability to check-out with a username and a building identifier (skeleton code provided)
 - [ ] Provide console output (STDERR) every time a check-in happens (event handler)
 - [ ] Provide console output (STDERR) every time a check-out happens (event handler)
-- [ ] Provide a file per building (accessible via HTTP) with usernames of currently checked-in persons
+- [x] Provide a file per building (accessible via HTTP) with usernames of currently checked-in persons

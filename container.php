@@ -11,6 +11,9 @@ use Bernard\QueueFactory;
 use Bernard\QueueFactory\PersistentFactory;
 use Building\Domain\Aggregate\Building;
 use Building\Domain\Command;
+use Building\Domain\DomainEvent\NewBuildingWasRegistered;
+use Building\Domain\DomainEvent\UserCheckedIntoBuilding;
+use Building\Domain\DomainEvent\UserCheckedOutOfBuilding;
 use Building\Domain\Repository\BuildingRepositoryInterface;
 use Building\Infrastructure\Repository\BuildingRepository;
 use Doctrine\DBAL\Connection;
@@ -31,6 +34,7 @@ use Prooph\EventStore\Adapter\PayloadSerializer\JsonPayloadSerializer;
 use Prooph\EventStore\Aggregate\AggregateRepository;
 use Prooph\EventStore\Aggregate\AggregateType;
 use Prooph\EventStore\EventStore;
+use Prooph\EventStore\Stream\StreamName;
 use Prooph\EventStoreBusBridge\EventPublisher;
 use Prooph\EventStoreBusBridge\TransactionManager;
 use Prooph\ServiceBus\Async\MessageProducer;
@@ -228,6 +232,54 @@ return new ServiceManager([
                     new AggregateTranslator()
                 )
             );
+        },
+
+        'publishCheckedInUsers' => function (ContainerInterface $container): callable {
+            return function (string $aggregateId) use ($container) {
+                $eventStore = $container->get(EventStore::class);
+
+                $users = [];
+                $events = $eventStore->loadEventsByMetadataFrom(new StreamName('event_stream'), ['aggregate_id' => $aggregateId]);
+                foreach ($events as $event) {
+
+                    if ($event instanceof UserCheckedIntoBuilding) {
+                        $users[$event->username()] = true;
+                    }
+
+                    if ($event instanceof UserCheckedOutOfBuilding) {
+                        unset($users[$event->username()]);
+                    }
+                }
+
+                file_put_contents(
+                    __DIR__ . '/public/building-' . $aggregateId . '-users.json',
+                    json_encode(array_keys($users, JSON_PRETTY_PRINT))
+                );
+            };
+        },
+
+        NewBuildingWasRegistered::class . '-projectors' => function (ContainerInterface $container) {
+            return [
+                function (NewBuildingWasRegistered $event) use ($container) {
+                    $container->get('publishCheckedInUsers')($event->aggregateId());
+                },
+            ];
+        },
+
+        UserCheckedIntoBuilding::class . '-projectors' => function (ContainerInterface $container) {
+            return [
+                function (UserCheckedIntoBuilding $event) use ($container) {
+                    $container->get('publishCheckedInUsers')($event->aggregateId());
+                },
+            ];
+        },
+
+        UserCheckedOutOfBuilding::class . '-projectors' => function (ContainerInterface $container) {
+            return [
+                function (UserCheckedOutOfBuilding $event) use ($container) {
+                    $container->get('publishCheckedInUsers')($event->aggregateId());
+                },
+            ];
         },
     ],
 ]);
