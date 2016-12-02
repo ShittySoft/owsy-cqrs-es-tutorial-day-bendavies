@@ -11,9 +11,12 @@ use Bernard\QueueFactory;
 use Bernard\QueueFactory\PersistentFactory;
 use Building\Domain\Aggregate\Building;
 use Building\Domain\Command;
+use Building\Domain\DomainEvent\CheckInAnomalyDetected;
+use Building\Domain\DomainEvent\DoubleCheckInDetected;
 use Building\Domain\DomainEvent\NewBuildingWasRegistered;
 use Building\Domain\DomainEvent\UserCheckedIntoBuilding;
 use Building\Domain\DomainEvent\UserCheckedOutOfBuilding;
+use Building\Domain\ProcessManager\NotifyAdministratorOfCheckinAnomaly;
 use Building\Domain\Repository\BuildingRepositoryInterface;
 use Building\Infrastructure\Repository\BuildingRepository;
 use Doctrine\DBAL\Connection;
@@ -222,6 +225,26 @@ return new ServiceManager([
 
                 $building->checkOutUser($command->username());
             };
+        },
+
+        Command\NotifyAdministratorOfCheckingAnomaly::class => function (ContainerInterface $container): callable {
+            $buildings = $container->get(BuildingRepositoryInterface::class);
+
+            return function (Command\NotifyAdministratorOfCheckingAnomaly $command) use ($buildings) {
+                error_log(
+                    sprintf(
+                        'User \'%s\' check in anomoly detected in building \'%s\'',
+                        $command->username(),
+                        $command->buildingId()
+                    )
+                );
+            };
+        },
+
+        CheckInAnomalyDetected::class . '-listeners' => function (ContainerInterface $container) {
+            return [
+                new NotifyAdministratorOfCheckinAnomaly($container->get(CommandBus::class))
+            ];
         },
 
         BuildingRepositoryInterface::class => function (ContainerInterface $container) : BuildingRepositoryInterface {
